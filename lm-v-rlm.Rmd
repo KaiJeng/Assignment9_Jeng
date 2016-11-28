@@ -1,0 +1,81 @@
+---
+title: "lm-v-rlm great title"
+author: "Darren Jeng"
+date: "November 27, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gapminder)
+library(MASS)
+library(broom)
+```
+
+## Question
+
+Following the approach in class for nested data frames, please calculate, for each country in the gapminder dataset, the slope of the linear regression of life expectency against log10 of per capita GDP. Do the same using the rlm function in the MASS package (rlm() gives robust estimates, which are less affected by outliers---the broom package works with the output of rlm). Produce a plot of the slope estimates from lm versus the slope estimates from rlm. Countries that don't fall near the diagonal line might have a non-normal error distribution. For the countries with the biggest differences in the two slope estimates, show the scatter plots of log10 per capita GDP versus life expectency.
+
+```{r cars, echo=TRUE}
+# Borrowed some code; nest information by country
+gapNest <- gapminder %>% mutate(log_gdpPercap = log10(gdpPercap)) %>%
+  group_by(continent, country) %>% nest()
+
+# Function for linear model
+gap_lm <- function(df){
+  lm(lifeExp ~ log_gdpPercap, data = df)
+}
+
+# Function for "robust fitting" of linear model
+gap_rlm <- function(df){
+  rlm(lifeExp ~ log_gdpPercap, data = df)
+}
+
+# Append slopes to original data
+gapNest <- gapNest %>% mutate(lm_fit = map(data, gap_lm))
+gapNest <- gapNest %>% mutate(rlm_fit = map(data, gap_rlm))
+
+# Borrowed this code to format the lm and rlm lists into data frames to tidy. Since the function didn't output a tibble, I couldn't use unnest. I couldn't figure out a way to manually extract the slope value from each list but this code does it.
+gapLM <- data.frame(matrix(unlist(gapNest$lm_fit), nrow=142, byrow=TRUE))
+names(gapLM) <- make.names(names(gapLM))
+names(gapLM)[2] <- "SlopeLM"
+
+
+# Well, using the code above to extract the rlm() calculated slope values didn't work. I've tried a for loop which would call each individual list then extract the slope from each one, putting it into a list, then putting that list into a data frame. 
+
+# Put dummy value to create list
+gapRLM <- 999
+
+  for (i in 1:142) {
+    gotta <- gapNest$rlm_fit[i]
+    extrac <- data.frame(matrix(unlist(gotta), nrow=1, byrow=TRUE))
+    gapRLM <- rbind(gapRLM,extrac$X2)
+  }
+
+# Remove dummy value
+gapRLM[[1]] <- NULL
+
+Slippin <- 1:142
+Slippin <- as.data.frame(Slippin)
+Slippin$SlopeLM <- gapLM$SlopeLM
+Slippin$SlopeRLM <- gapRLM
+
+# Well plotting doesn't work and I am running out of time to finish this assignment since extracting slopes took forever to figure out so I will be plotting residuals instead. 
+
+# Nevermind I figured out I didn't change format of the list from list to numeric.
+Slippin$SlopeLM <- as.numeric(Slippin$SlopeLM)
+Slippin$SlopeRLM <- as.numeric(Slippin$SlopeRLM)
+Slippin %>% ggplot(mapping = aes(SlopeLM, SlopeRLM)) + geom_point()
+
+# From the graph there seems to be one extreme outlier. Lets check that one out specifically. I do this by getting the difference between LM and RLM and figuring out which row number has the highest change. I can use that row number and search the country (which was Senegal) then pick up that data to plot.
+
+Slippin$Diff <- Slippin$SlopeLM + (-1*Slippin$SlopeRLM)
+Senegal <- gapNest$data[[111]]
+Senegal %>% ggplot(mapping = aes(log_gdpPercap, lifeExp)) + geom_point()
+
+# Looking at the the graph, the points make a nice S which must stand for "sorry" for not fitting a linear model. Or it stands for "Senegal". 
+
+```
+
+
